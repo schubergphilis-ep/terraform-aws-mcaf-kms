@@ -65,7 +65,7 @@ data "aws_iam_policy_document" "kms_key_policy" {
     }
   }
 
-  # Allow all principals in the account read-only access. This is required to allow users to view the key in the AWS console.
+  # Allow all principals in the account read-only access.
   dynamic "statement" {
     for_each = var.default_policy.iam_all_principals_read ? [true] : []
 
@@ -74,6 +74,8 @@ data "aws_iam_policy_document" "kms_key_policy" {
       actions = [
         "kms:Describe*",
         "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
       ]
       effect    = "Allow"
       resources = ["*"]

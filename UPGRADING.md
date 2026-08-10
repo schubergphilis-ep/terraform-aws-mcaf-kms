@@ -6,26 +6,45 @@ This document captures required refactoring on your part when upgrading to a mod
 
 ### Key Changes
 
-- The module **no longer falls back to the calling identity** when `default_policy.iam_arns_administrator` is empty. The `aws_iam_session_context` data source has been removed.
-- Instead, when the generated default policy is used, at least one principal ARN is now **required** in `default_policy.iam_arns_administrator` or `default_policy.iam_arns_owner`. Supplying neither is a validation error.
+- The module **no longer falls back to the calling identity** when `default_policy.iam_arns_administrator` is empty; the `aws_iam_session_context` data source has been removed.
+- When the generated default policy is used, at least one principal ARN is now **required** in `default_policy.iam_arns_administrator` or `default_policy.iam_arns_owner`.
+- `iam_all_principals_read` now also delegates `kms:GetKeyRotationStatus` and `kms:ListResourceTags` to IAM, so a read-only plan role can refresh the key without being a key administrator.
 
-The fallback was unsafe once plan and apply run under separate IAM roles: `aws_iam_session_context.issuer_arn` resolves to whichever role read it, so the key policy would grant administration to the plan role — typically a read-only role — and leave the apply role unable to manage the key it just created.
+The fallback resolved the administrator from whichever identity executed Terraform. With separate plan and apply roles that is the read-only plan role, so the key policy granted it key administration and left the apply role unable to manage the key it had just created.
 
 ### Required actions
 
-**This release is backwards compatible if you already pass `var.policy` or set `default_policy.enable = false`**: the generated policy is not used, so the requirement does not apply and the resulting key policy is unchanged.
+Nothing to do if you already pass `var.policy` or set `default_policy.enable = false` — the generated policy is not used, so the requirement does not apply.
 
-If you rely on the generated default policy, name the principals that manage the key explicitly:
+Otherwise, name the administrator explicitly. **Pass the ARN of the role used for apply**, since that is the identity that has to manage the key:
 
 ```hcl
 default_policy = {
-  iam_arns_administrator = ["arn:aws:iam::123456789012:role/key-admins"]
+  iam_arns_administrator = [var.tfc_aws_apply_role_arn]
 }
 ```
 
-Keys created by an earlier version that relied on the fallback currently list the Terraform role as administrator. Check the live key policy before upgrading (`aws kms get-key-policy --key-id <id> --policy-name default`) and carry the principal you want to keep over into `iam_arns_administrator` — otherwise the next apply removes it. If you do not have a separate role for plan/apply you can use the `aws_iam_session_context` data source yourself and pass this down as `iam_arns_administrator`.
+The plan role does not need to be listed — `iam_all_principals_read` delegates the read-only actions a refresh needs to IAM.
 
-If using `mcaf-avm` or `mcaf-workspace` to provide workspaces where this module will be used in, it's recommended to set `set_terraform_role_arn_variables` to true. This provides you with the run/apply role arn's on the workspace as terraform variables which you can use as input for the `iam_arns_administrator` variable of this module.
+If a **single** identity runs both plan and apply, resolving the caller yourself is still fine and reproduces the old behaviour exactly:
+
+```hcl
+data "aws_iam_session_context" "current" {
+  arn = data.aws_caller_identity.current.arn
+}
+```
+
+Do not do this when plan and apply use separate identities: it locks you out of the key.
+
+#### Workspaces provided by `mcaf-avm` or `mcaf-workspace`
+
+Set `set_terraform_role_arn_variables` to `true` to publish each pipeline role ARN as a Terraform-category workspace variable (`tfc_aws_run_role_arn`, `tfc_aws_plan_role_arn`, `tfc_aws_apply_role_arn`) for use as `iam_arns_administrator`.
+
+This is preferred over the `aws_iam_session_context` data source even with a single run role: the value is a static input, identical in every phase, so plan and apply can never disagree about who administers the key.
+
+### Before you upgrade
+
+Keys created by an earlier version list whichever role ran Terraform as administrator. Check the live policy and carry the principal you want to keep into `iam_arns_administrator`, otherwise the next apply removes it.
 
 ## Upgrading to v2.0.0
 

@@ -22,6 +22,18 @@ The module deliberately does **not** fall back to the identity running Terraform
 
 To opt out, set `default_policy.enable` to `false` to use AWS's default key policy, or pass a complete document via `var.policy` (which always takes precedence).
 
+### Workspaces provided by `mcaf-avm` or `mcaf-workspace`
+
+Set `set_terraform_role_arn_variables` to `true` to publish each pipeline role ARN as a Terraform-category workspace variable (`tfc_aws_run_role_arn`, `tfc_aws_plan_role_arn`, `tfc_aws_apply_role_arn`) for use as `iam_arns_administrator`.
+
+Which ARN to pass as `iam_arns_administrator` depends on how the workspace authenticates:
+
+* **A single run role** — pass `tfc_aws_run_role_arn`.
+* **Separate plan and apply roles** — pass `tfc_aws_apply_role_arn`, since apply is the phase that has to manage the key. The plan role does not need to be listed: `iam_all_principals_read` delegates the read-only actions a state refresh needs to IAM.
+* **Moving between the two** — pass **both** while the switch is in flight, then drop the ARN you no longer use. Listing only the incoming role locks out the outgoing one, which is still the role that has to apply that very change.
+
+This is preferred over the `aws_iam_session_context` data source even with a single run role: the value is a static input, identical in every phase, so plan and apply can never disagree about who administers the key.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
