@@ -25,7 +25,7 @@ default_policy = {
 
 Keys created by an earlier version that relied on the fallback currently list the Terraform role as administrator. Check the live key policy before upgrading (`aws kms get-key-policy --key-id <id> --policy-name default`) and carry the principal you want to keep over into `iam_arns_administrator` — otherwise the next apply removes it. If you do not have a separate role for plan/apply you can use the `aws_iam_session_context` data source yourself and pass this down as `iam_arns_administrator`.
 
-If using `mcaf-avm` or `mcaf-workspace` ensure `set_terraform_role_arn_variables` has been set to true. This provides you with the role arn's on the workspace as terraform variables which you can use as input for this module.
+If using `mcaf-avm` or `mcaf-workspace` to provide workspaces where this module will be used in, it's recommended to set `set_terraform_role_arn_variables` to true. This provides you with the run/apply role arn's on the workspace as terraform variables which you can use as input for the `iam_arns_administrator` variable of this module.
 
 ## Upgrading to v2.0.0
 
