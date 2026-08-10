@@ -2,6 +2,31 @@
 
 This document captures required refactoring on your part when upgrading to a module version that contains breaking changes.
 
+## Upgrading to v3.0.0
+
+### Key Changes
+
+- The module **no longer falls back to the calling identity** when `default_policy.iam_arns_administrator` is empty. The `aws_iam_session_context` data source has been removed.
+- Instead, when the generated default policy is used, at least one principal ARN is now **required** in `default_policy.iam_arns_administrator` or `default_policy.iam_arns_owner`. Supplying neither is a validation error.
+
+The fallback was unsafe once plan and apply run under separate IAM roles: `aws_iam_session_context.issuer_arn` resolves to whichever role read it, so the key policy would grant administration to the plan role — typically a read-only role — and leave the apply role unable to manage the key it just created.
+
+### Required actions
+
+**This release is backwards compatible if you already pass `var.policy` or set `default_policy.enable = false`**: the generated policy is not used, so the requirement does not apply and the resulting key policy is unchanged.
+
+If you rely on the generated default policy, name the principals that manage the key explicitly:
+
+```hcl
+default_policy = {
+  iam_arns_administrator = ["arn:aws:iam::123456789012:role/key-admins"]
+}
+```
+
+Keys created by an earlier version that relied on the fallback currently list the Terraform role as administrator. Check the live key policy before upgrading (`aws kms get-key-policy --key-id <id> --policy-name default`) and carry the principal you want to keep over into `iam_arns_administrator` — otherwise the next apply removes it. If you do not have a separate role for plan/apply you can use the `aws_iam_session_context` data source yourself and pass this down as `iam_arns_administrator`.
+
+If using `mcaf-avm` or `mcaf-workspace` ensure `set_terraform_role_arn_variables` has been set to true. This provides you with the role arn's on the workspace as terraform variables which you can use as input for this module.
+
 ## Upgrading to v2.0.0
 
 ### Key Changes

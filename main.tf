@@ -2,10 +2,6 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   partition  = data.aws_partition.current.partition
 
-  # If no administrators are specified, fall back to the current caller so the key
-  # never ends up without a principal able to manage it.
-  iam_administrator = coalescelist(var.default_policy.iam_arns_administrator, [data.aws_iam_session_context.current.issuer_arn])
-
   # Use an explicit policy when provided, otherwise the generated default policy.
   # When default_policy.enable is false and no explicit policy is set, the key is
   # left unmanaged so AWS applies its built-in default key policy.
@@ -13,7 +9,6 @@ locals {
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_iam_session_context" "current" { arn = data.aws_caller_identity.current.arn }
 data "aws_partition" "current" {}
 
 ################################################################################
@@ -90,11 +85,11 @@ data "aws_iam_policy_document" "kms_key_policy" {
     }
   }
 
-  # Allow principals specified in iam_arns_administrator to have permissions to manage the KMS key, 
-  # but no permissions to use the KMS key in cryptographic operations. 
+  # Allow principals specified in iam_arns_administrator to have permissions to manage the KMS key,
+  # but no permissions to use the KMS key in cryptographic operations.
   # https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#key-policy-default-allow-administrators
   dynamic "statement" {
-    for_each = length(local.iam_administrator) > 0 ? [true] : []
+    for_each = length(var.default_policy.iam_arns_administrator) > 0 ? [true] : []
 
     content {
       sid = "AllowAdministrator"
@@ -122,7 +117,7 @@ data "aws_iam_policy_document" "kms_key_policy" {
 
       principals {
         type        = "AWS"
-        identifiers = local.iam_administrator
+        identifiers = var.default_policy.iam_arns_administrator
       }
     }
   }
