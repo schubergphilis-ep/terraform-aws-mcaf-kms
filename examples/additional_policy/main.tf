@@ -42,6 +42,7 @@ module "additional_policy" {
   name = "additional_policy"
 
   default_policy = {
+    iam_arns_administrator  = ["arn:aws:iam::${data.aws_caller_identity.default.account_id}:role/key-admins"]
     source_policy_documents = [data.aws_iam_policy_document.kms_key_policy.json]
   }
 }

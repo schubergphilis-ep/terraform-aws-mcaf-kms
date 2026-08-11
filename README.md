@@ -7,7 +7,7 @@ Terraform module to manage an AWS KMS key and its alias.
 By default the module generates a **least-privilege key policy** from the `default_policy` object.
 Grant access by listing principal ARNs in its`iam_arns_*` fields:
 
-* `iam_arns_administrator` for key management. If no administrator is given, the calling identity is added so the key is never left unmanageable.
+* `iam_arns_administrator` for key management.
 * `iam_arns_decrypt` / `iam_arns_decrypt_encrypt` for data operations.
 * `iam_arns_sign_verify` for signing.
 * `iam_arns_owner` for full access.
@@ -17,7 +17,22 @@ Grant access by listing principal ARNs in its`iam_arns_*` fields:
 > Use and administration must be listed explicitly in `default_policy.iam_arns_*`.
 > (Read-only metadata access is still delegated to IAM while `iam_all_principals_read` is `true`.)
 
+Because nothing is granted implicitly, at least one principal ARN must be set in `iam_arns_administrator` or `iam_arns_owner` — otherwise the key would end up without any principal able to manage it.
+The module deliberately does **not** fall back to the identity running Terraform: when plan and apply run under separate roles, that would bake whichever role happened to read the session context into the key policy, locking out the other one.
+
 To opt out, set `default_policy.enable` to `false` to use AWS's default key policy, or pass a complete document via `var.policy` (which always takes precedence).
+
+### Workspaces provided by `mcaf-avm` or `mcaf-workspace`
+
+Set `set_terraform_role_arn_variables` to `true` to publish each pipeline role ARN as a Terraform-category workspace variable (`tfc_aws_run_role_arn`, `tfc_aws_plan_role_arn`, `tfc_aws_apply_role_arn`) for use as `iam_arns_administrator`.
+
+Which ARN to pass as `iam_arns_administrator` depends on how the workspace authenticates:
+
+* **A single run role** — pass `tfc_aws_run_role_arn`.
+* **Separate plan and apply roles** — pass `tfc_aws_apply_role_arn`, since apply is the phase that has to manage the key. The plan role does not need to be listed: `iam_all_principals_read` delegates the read-only actions a state refresh needs to IAM.
+* **Moving between the two** — pass **both** while the switch is in flight, then drop the ARN you no longer use. Listing only the incoming role locks out the outgoing one, which is still the role that has to apply that very change.
+
+This is preferred over the `aws_iam_session_context` data source even with a single run role: the value is a static input, identical in every phase, so plan and apply can never disagree about who administers the key.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -45,7 +60,6 @@ No modules.
 | [aws_kms_key.default](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.kms_key_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
-| [aws_iam_session_context.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_session_context) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
 
 ## Inputs
@@ -55,7 +69,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | The name of the key | `string` | n/a | yes |
 | <a name="input_custom_key_store_id"></a> [custom\_key\_store\_id](#input\_custom\_key\_store\_id) | ID of the KMS Custom Key Store where the key will be stored instead of KMS (eg CloudHSM) | `string` | `null` | no |
 | <a name="input_customer_master_key_spec"></a> [customer\_master\_key\_spec](#input\_customer\_master\_key\_spec) | Specifies whether the key contains a symmetric key or an asymmetric key pair and the encryption algorithms or signing algorithms that the key supports. | `string` | `"SYMMETRIC_DEFAULT"` | no |
-| <a name="input_default_policy"></a> [default\_policy](#input\_default\_policy) | Configuration object for defining the KMS key policy and permissions. Use `override_policy_documents` to add statements that override the default policy, or `source_policy_documents` to add statements that are merged with the default policy | <pre>object({<br/>    enable                    = optional(bool, true)<br/>    override_policy_documents = optional(list(string), [])<br/>    source_policy_documents   = optional(list(string), [])<br/><br/>    iam_all_principals_read  = optional(bool, true)<br/>    iam_arns_administrator   = optional(list(string), [])<br/>    iam_arns_decrypt         = optional(list(string), [])<br/>    iam_arns_decrypt_encrypt = optional(list(string), [])<br/>    iam_arns_owner           = optional(list(string), [])<br/>    iam_arns_service_grant   = optional(list(string), [])<br/>    iam_arns_sign_verify     = optional(list(string), [])<br/>    iam_aws_config_read      = optional(bool, true)<br/>  })</pre> | `{}` | no |
+| <a name="input_default_policy"></a> [default\_policy](#input\_default\_policy) | Configuration object for defining the KMS key policy and permissions. Requires at least one principal ARN in `iam_arns_administrator` or `iam_arns_owner` when the default policy is used. Use `override_policy_documents` to add statements that override the default policy, or `source_policy_documents` to add statements that are merged with the default policy | <pre>object({<br/>    enable                    = optional(bool, true)<br/>    override_policy_documents = optional(list(string), [])<br/>    source_policy_documents   = optional(list(string), [])<br/><br/>    iam_all_principals_read  = optional(bool, true)<br/>    iam_arns_administrator   = optional(list(string), [])<br/>    iam_arns_decrypt         = optional(list(string), [])<br/>    iam_arns_decrypt_encrypt = optional(list(string), [])<br/>    iam_arns_owner           = optional(list(string), [])<br/>    iam_arns_service_grant   = optional(list(string), [])<br/>    iam_arns_sign_verify     = optional(list(string), [])<br/>    iam_aws_config_read      = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | <a name="input_deletion_window_in_days"></a> [deletion\_window\_in\_days](#input\_deletion\_window\_in\_days) | Delay in days after which the key is deleted | `number` | `30` | no |
 | <a name="input_description"></a> [description](#input\_description) | The description of the key as viewed in AWS console | `string` | `null` | no |
 | <a name="input_enable_key_rotation"></a> [enable\_key\_rotation](#input\_enable\_key\_rotation) | Specifies whether key rotation is enabled | `bool` | `true` | no |

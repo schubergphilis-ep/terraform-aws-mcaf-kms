@@ -1,13 +1,10 @@
 # Mock aws provider, otherwise Terraform tries to connect to the service API.
-# aws_caller_identity feeds aws_iam_session_context.arn, which the provider
-# ARN-validates, so it needs a syntactically valid mocked ARN.
+# account_id is interpolated into the principal ARNs of the generated policy, so
+# it needs a syntactically valid mocked value rather than a generated one.
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
     defaults = {
       account_id = "123456789012"
-      arn        = "arn:aws:iam::123456789012:role/terraform"
-      id         = "123456789012"
-      user_id    = "AROAEXAMPLEID"
     }
   }
 }
@@ -41,6 +38,10 @@ run "default" {
 
   variables {
     name = "default-${run.setup.random_string}"
+
+    default_policy = {
+      iam_arns_administrator = ["arn:aws:iam::123456789012:role/key-admins"]
+    }
   }
 
   # KMS key alias
@@ -78,7 +79,9 @@ run "default" {
   }
 }
 
-# An explicit policy must take precedence over the generated default policy.
+# An explicit policy must take precedence over the generated default policy. Setting
+# var.policy also exempts the caller from having to name administrators, since the
+# generated policy is discarded.
 run "explicit_policy_takes_precedence" {
   command = plan
 
@@ -147,5 +150,51 @@ run "default_policy_disabled_with_explicit_policy" {
   assert {
     condition     = output.policy == "{\"Sid\":\"Explicit\"}"
     error_message = "Expected the explicit policy to be used when default_policy.enable is false, got: ${output.policy}"
+  }
+}
+
+# The generated policy grants key management explicitly and never falls back to the
+# calling identity, so it must be rejected when nobody is able to manage the key.
+run "default_policy_requires_a_managing_principal" {
+  command = plan
+
+  module {
+    source = "./"
+  }
+
+  variables {
+    name = "no-admin-${run.setup.random_string}"
+  }
+
+  expect_failures = [var.default_policy]
+}
+
+# iam_arns_owner grants kms:* and is therefore a superset of iam_arns_administrator,
+# so naming an owner is enough to keep the key manageable.
+run "default_policy_owner_satisfies_managing_principal" {
+  command = plan
+
+  module {
+    source = "./"
+  }
+
+  override_data {
+    target = data.aws_iam_policy_document.kms_key_policy
+    values = {
+      json = "{\"Sid\":\"GeneratedDefault\"}"
+    }
+  }
+
+  variables {
+    name = "owner-only-${run.setup.random_string}"
+
+    default_policy = {
+      iam_arns_owner = ["arn:aws:iam::123456789012:role/key-owners"]
+    }
+  }
+
+  assert {
+    condition     = output.policy == "{\"Sid\":\"GeneratedDefault\"}"
+    error_message = "Expected the generated default policy to be applied when only iam_arns_owner is set, got: ${output.policy}"
   }
 }

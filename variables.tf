@@ -88,7 +88,15 @@ variable "default_policy" {
     iam_aws_config_read      = optional(bool, true)
   })
   default     = {}
-  description = "Configuration object for defining the KMS key policy and permissions. Use `override_policy_documents` to add statements that override the default policy, or `source_policy_documents` to add statements that are merged with the default policy"
+  description = "Configuration object for defining the KMS key policy and permissions. Requires at least one principal ARN in `iam_arns_administrator` or `iam_arns_owner` when the default policy is used. Use `override_policy_documents` to add statements that override the default policy, or `source_policy_documents` to add statements that are merged with the default policy"
+
+  validation {
+    condition = (
+      !var.default_policy.enable || var.policy != null ||
+      length(concat(var.default_policy.iam_arns_administrator, var.default_policy.iam_arns_owner)) > 0
+    )
+    error_message = "At least one principal ARN must be set in default_policy.iam_arns_administrator or default_policy.iam_arns_owner, otherwise the key is left without a principal able to manage it. To manage the key policy yourself, set default_policy.enable to false or pass a complete document via var.policy."
+  }
 }
 
 variable "region" {
