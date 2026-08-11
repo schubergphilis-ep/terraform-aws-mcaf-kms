@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/compare/v2.2.0...v3.0.0) (2026-08-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* require an explicit key administrator in the default policy ([#2](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/issues/2))
+
+### 🚀 Features
+
+* require an explicit key administrator in the default policy ([#2](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/issues/2)) ([43b92ed](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/commit/43b92ed4c31827d9d74f99d8f73aab872fd896ef))
+
 ## [2.2.0](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/compare/v2.1.0...v2.2.0) (2026-06-09)
 
 
@@ -74,4 +85,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2](https://github.com/schubergphilis-ep/terraform-aws-mcaf-kms/compare/v0.1.3...v0.1.2) (2019-07-09)
 
 ## 0.1.3 (2019-07-09)
-
